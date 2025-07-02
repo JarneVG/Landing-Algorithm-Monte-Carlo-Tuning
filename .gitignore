@@ -1,0 +1,9 @@
+# Ignore virtual environment
+.venv/
+
+# Ignore Python bytecode cache folders (platform-independent)
+__pycache__/
+*/__pycache__/
+
+# Optional: Ignore all .pyc files
+*.pyc
