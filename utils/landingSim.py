@@ -2,6 +2,11 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.interpolate import interp1d
 import pandas as pd
+from numba import njit
+try:
+    from .thrustCurves import thrust_curves
+except ImportError:
+    from thrustCurves import thrust_curves
 
 
 
@@ -23,7 +28,7 @@ class LandingConditions:
 @dataclass
 class SimulationConfig:
     enable_graphs: bool = True
-    sampling_rate: float = 0.01  # seconds, how often to sample the simulation data
+    time_step: float = 0.01  # seconds, how often to sample the simulation data
     max_sim_time: float = 20.0  # seconds, maximum simulation time
     
 @dataclass
@@ -39,7 +44,10 @@ class LandingResult:
     
 # === Load Thrust Angle Data ===
 # Load the CSV file
-df = pd.read_csv("angle_data_10deg.csv")
+import os
+current_dir = os.path.dirname(__file__)
+parent_dir = os.path.dirname(current_dir)
+df = pd.read_csv(os.path.join(parent_dir, "angle_data_10deg.csv"))
 
 # Extract columns into arrays
 thrust_angle_times_10deg = df["time"].values       # in seconds
@@ -347,7 +355,7 @@ def simulate_landing(rocket: RocketSpecs, conditions: LandingConditions, sim_con
     equivalent_drop_height = 0.0
     t = 0.0
     t_max = sim_config.max_sim_time  # Maximum simulation time
-    dt = sim_config.sampling_rate  # Time step for the simulation
+    dt = sim_config.time_step  # Time step for the simulation
     n_steps = int(t_max / dt)
     landing_motor_start_time = engine_comeup_time
 
@@ -514,7 +522,6 @@ def simulate_landing(rocket: RocketSpecs, conditions: LandingConditions, sim_con
 
 
 
-        
     
     
     
@@ -525,18 +532,20 @@ if __name__ == "__main__":
     rocket = RocketSpecs(
         motor_model="Klima D3",
         number_of_motors=2,
-        starting_mass=0.57
+        starting_mass=0.57,
+        frontal_area=np.pi * 0.035**2,  # m^2, default frontal area
+        Cd=0.82,  # Drag coefficient, default value for a cylinder
     )
 
     conditions = LandingConditions(
-        altitude=16.0,
+        altitude=30.0,
         vertical_velocity=0.0,
-        starting_angle_deg=20.0
+        starting_angle_deg=10.0
     )
 
     config = SimulationConfig(
         enable_graphs=False,
-        sampling_rate=0.002,  # seconds
+        time_step=0.002,  # seconds
         max_sim_time=20.0  # seconds
     )
 

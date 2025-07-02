@@ -1,11 +1,15 @@
 ## Run with command: 'streamlit run MonteCarloLandingSim.py'
 
+import utils.thrustCurves
 from utils.landingSim import simulate_landing
 from utils.landingSim import RocketSpecs, LandingConditions, SimulationConfig
 from utils.iterateForLandingTime import get_best_ignition_time
 import streamlit as st
 import numpy as np
 import time
+import plotly.graph_objects as go
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.linear_model import LinearRegression
 
 st.title("Monte Carlo Landing Simulation")
 
@@ -154,7 +158,7 @@ if run:
                 )
                 sim_config = SimulationConfig(
                     enable_graphs=False,
-                    sampling_rate=timestep,
+                    time_step=timestep,
                     max_sim_time=20
                 )
                 # Iterate to find ignition time for this setup
@@ -163,6 +167,7 @@ if run:
                 ignition_comeup_time.text(f"Ignition comeup time: {ignition_time_matrix[i,j]:.2f}s")
                     
     st.success(f"Result:")
+
 
     # 3D Plot of ignition_time_matrix
     import plotly.graph_objects as go
@@ -187,9 +192,89 @@ if run:
     )
 
     st.plotly_chart(fig, use_container_width=True)
-# ...existing code...
+    
+    
+    # Create meshgrid
+    AltitudeMesh, VelocityMesh = np.meshgrid(altitude_points, velocity_points)
 
+    # Flatten arrays
+    altitude_flat = AltitudeMesh.flatten()
+    velocity_flat = VelocityMesh.flatten()
+    ignition_flat = ignition_time_matrix.flatten()
 
+    # Filter out invalid values (e.g. -0.01 meaning "invalid")
+    mask = ignition_flat != -0.01
+    alt_fit = altitude_flat[mask]
+    vel_fit = velocity_flat[mask]
+    ign_fit = ignition_flat[mask]
 
+    # Prepare data for 2D polynomial fitting (poly22 = second order in both x and y)
+    X = np.vstack((alt_fit, vel_fit)).T
+    poly = PolynomialFeatures(degree=2, include_bias=True)
+    X_poly = poly.fit_transform(X)
 
+    # Fit polynomial
+    model = LinearRegression()
+    model.fit(X_poly, ign_fit)
+    coeffs = model.coef_
+    intercept = model.intercept_
 
+    # Map to Arduino-style variable names
+    p00 = intercept
+    p10, p01 = coeffs[1], coeffs[2]
+    p20, p11, p02 = coeffs[3], coeffs[4], coeffs[5]
+
+    # Arduino-style printout
+    print(f"const float p00 = {p00:.6f};")
+    print(f"const float p10 = {p10:.6f};")
+    print(f"const float p01 = {p01:.6f};")
+    print(f"const float p20 = {p20:.6f};")
+    print(f"const float p11 = {p11:.6f};")
+    print(f"const float p02 = {p02:.6f};")
+
+    # Evaluate the fitted surface on the full meshgrid
+    A_full = AltitudeMesh.flatten()
+    V_full = VelocityMesh.flatten()
+    X_eval = np.vstack((A_full, V_full)).T
+    X_eval_poly = poly.transform(X_eval)
+    fitted_values = model.predict(X_eval_poly).reshape(AltitudeMesh.shape)
+
+    # Plot using Plotly
+    fig = go.Figure()
+
+    # Original surface
+    fig.add_trace(go.Surface(
+        z=ignition_time_matrix,
+        x=altitude_points,
+        y=velocity_points,
+        colorscale='Hot',
+        opacity=0.7,
+        name='Original Data',
+        showscale=True
+    ))
+
+    # Fitted surface
+    fig.add_trace(go.Surface(
+        z=fitted_values,
+        x=altitude_points,
+        y=velocity_points,
+        colorscale='Viridis',
+        opacity=0.7,
+        name='Fitted Polynomial',
+        showscale=False
+    ))
+
+    fig.update_layout(
+        scene=dict(
+            xaxis_title='Altitude',
+            yaxis_title='Velocity',
+            zaxis_title='Ignition Time',
+            zaxis=dict(range=[-0.009, 0.009]),
+            camera=dict(eye=dict(x=0, y=0, z=2), up=dict(x=0, y=1, z=0)),
+        ),
+        title='Original and Fitted Polynomial Surface',
+        legend=dict(x=0.8, y=0.9),
+        margin=dict(l=0, r=0, b=0, t=40)
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
