@@ -11,6 +11,40 @@ import plotly.graph_objects as go
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.linear_model import LinearRegression
 
+def air_density_with_humidity(temperature_C, relative_humidity, pressure_Pa=101325):
+    """
+    Calculate moist air density from temperature, pressure, and relative humidity.
+
+    Parameters:
+        temperature_C (float): Temperature in °C
+        relative_humidity (float): Relative humidity in % (0-100)
+        pressure_Pa (float): Ambient pressure in Pascals (default = sea level)
+
+    Returns:
+        float: Moist air density in kg/m³
+    """
+    # Constants
+    R_d = 287.05     # J/(kg·K), for dry air
+    R_v = 461.495    # J/(kg·K), for water vapor
+
+    # Convert temperature to Kelvin
+    T = temperature_C + 273.15
+
+    # Saturation vapor pressure over water (in Pa)
+    p_sat = 610.78 * 10 ** (7.5 * temperature_C / (237.3 + temperature_C))
+
+    # Actual vapor pressure (Pa)
+    p_v = (relative_humidity / 100.0) * p_sat
+
+    # Partial pressure of dry air (Pa)
+    p_d = pressure_Pa - p_v
+
+    # Air density (kg/m³)
+    density = (p_d / (R_d * T)) + (p_v / (R_v * T))
+
+    return density
+
+
 st.title("Monte Carlo Landing Simulation")
 
 # ==== setup rocket parameters =====
@@ -53,7 +87,26 @@ with st.form("Rocket Specifications"):
             format="%.3f"  # format to 3 decimal places
         )
     )
+    temperature_C = st.slider(
+        "Ambient Temperature (°C)", 
+        value=20.0,
+        min_value=-10.0,
+        max_value=50.0,
+        step=1.0,
+        format="%d"
+    )
 
+    relative_humidity = st.slider(
+        "Relative Humidity (%)", 
+        value=50.0,
+        min_value=0.0,
+        max_value=100.0,
+        step=1.0,
+        format="%d"
+    )
+
+    rho = air_density_with_humidity(temperature_C, relative_humidity)
+    st.write(f"Air Density: {rho:.2f} kg/m³")
 
     st.divider()
     # ==== setup landing conditions =====
@@ -162,7 +215,7 @@ if run:
                     max_sim_time=20
                 )
                 # Iterate to find ignition time for this setup
-                ignition_time_matrix[i,j], iterations = get_best_ignition_time(rocket, conditions, sim_config, max_iterations=max_iterations) 
+                ignition_time_matrix[i,j], iterations = get_best_ignition_time(rocket, conditions, sim_config, rho, max_iterations=max_iterations) 
                 number_of_iterations.text(f"Number of iterations before convergence: {iterations}")
                 ignition_comeup_time.text(f"Ignition comeup time: {ignition_time_matrix[i,j]:.2f}s")
                     
@@ -224,14 +277,22 @@ if run:
     p10, p01 = coeffs[1], coeffs[2]
     p20, p11, p02 = coeffs[3], coeffs[4], coeffs[5]
 
-    # Arduino-style printout
-    print(f"const float p00 = {p00:.6f};")
-    print(f"const float p10 = {p10:.6f};")
-    print(f"const float p01 = {p01:.6f};")
-    print(f"const float p20 = {p20:.6f};")
-    print(f"const float p11 = {p11:.6f};")
-    print(f"const float p02 = {p02:.6f};")
+    def generate_arduino_constants(p00, p10, p01, p20, p11, p02):
+        # Generate the Arduino-style constant declarations as a multi-line string
+        return (
+            f"const float p00 = {p00:.6f};\n"
+            f"const float p10 = {p10:.6f};\n"
+            f"const float p01 = {p01:.6f};\n"
+            f"const float p20 = {p20:.6f};\n"
+            f"const float p11 = {p11:.6f};\n"
+            f"const float p02 = {p02:.6f};"
+        )
+    
+    arduino_constants = generate_arduino_constants(p00, p10, p01, p20, p11, p02)
 
+    # Display it in a copyable text area
+    st.text_area("Arduino Constants", value=arduino_constants, height=150)
+    
     # Evaluate the fitted surface on the full meshgrid
     A_full = AltitudeMesh.flatten()
     V_full = VelocityMesh.flatten()

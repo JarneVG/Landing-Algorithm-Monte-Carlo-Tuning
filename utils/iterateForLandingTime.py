@@ -9,7 +9,7 @@ except ImportError:
     from landingSim import simulate_landing
     from landingSimNumba import do_fast_landing_simulation, LandingResult
 
-def get_best_ignition_time(rocket_specs, landing_conditions, sim_config, max_iterations=50):
+def get_best_ignition_time(rocket_specs, landing_conditions, sim_config, rho = 1.225, max_iterations=50):
     """
     Function to iterate through all possible ignition times and return the best one.
     
@@ -40,7 +40,8 @@ def get_best_ignition_time(rocket_specs, landing_conditions, sim_config, max_ite
         initial_altitude=landing_conditions.altitude,
         initial_velocity=landing_conditions.vertical_velocity,
         max_time=sim_config.max_sim_time,
-        max_drop_height=rocket_specs.max_equivalent_drop_height
+        max_drop_height=rocket_specs.max_equivalent_drop_height,
+        rho=rho
         # angle_of_thrust is automatically loaded in in the landingSimNumba.py file
     )
         

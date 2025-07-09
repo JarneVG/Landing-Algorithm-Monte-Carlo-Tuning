@@ -99,7 +99,8 @@ def fast_landing_sim(
     initial_altitude = 30.0,
     initial_vertical_velocity = -0.0,
     time_step = 0.01,
-    max_sim_time = 20.0):
+    max_sim_time = 20.0,
+    rho = 1.225):
 
     """
     Fast landing simulation using Numba for performance.
@@ -125,7 +126,7 @@ def fast_landing_sim(
     altitude = initial_altitude
     for i in range(numOfSteps):
         # Calculate forces
-        drag_force = 0.5 * Cd * frontal_area * (velocity ** 2) * np.sign(velocity)
+        drag_force = 0.5 * rho * Cd * frontal_area * (velocity ** 2) * np.sign(velocity)
         net_force = vertical_thrust_array[i] - drag_force - mass_array[i]*9.81 # drag force goes with minus because of sign(velocity)
         
         acceleration = net_force / mass_array[i]  # Thrust - gravity
@@ -171,6 +172,7 @@ def do_fast_landing_simulation(
     frontal_area: float = 0.035**2 * np.pi,
     drag_coefficient: float = 0.82,
     max_drop_height: float = 1.5,
+    rho: float = 1.225
 ):
     """
     Prepares input arrays and runs the fast landing simulation.
@@ -233,7 +235,9 @@ def do_fast_landing_simulation(
         initial_altitude=initial_altitude,
         initial_vertical_velocity=initial_velocity,
         time_step=dt,
-        max_sim_time=max_time
+        max_sim_time=max_time,
+        rho=rho
+        
     )
 
     return result
